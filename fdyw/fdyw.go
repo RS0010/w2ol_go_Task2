@@ -1,4 +1,4 @@
-package main
+package fdyw
 
 import (
 	"database/sql"
@@ -130,7 +130,7 @@ func articleGet(url string) article {
 				log.Fatalln("Can't find src!")
 			}
 			image.image, done = imageGet(urlGet(url, path))
-			if done{
+			if done {
 				if len(s.Next().Find("span").Nodes) != 0 {
 					image.title = s.Next().Find("span").Text()
 				}
@@ -240,7 +240,7 @@ func articleUpdate(article article, db *sqlx.DB, id int) {
 }
 
 func imageUpdate(images []image, db *sqlx.DB, id []int) {
-	for i := range id{
+	for i := range id {
 		_, err := db.Exec("UPDATE fdyw_image SET title=?, image=? WHERE id=?", images[i].title, images[i].image, id[i])
 		if err != nil {
 			log.Fatalln(err)
@@ -285,7 +285,6 @@ func main() {
 			break
 		}
 	}
-
 
 	//article := articleGet("https://news.fzu.edu.cn/info/1002/11850.htm")
 	//databaseChange(article, db)

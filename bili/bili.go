@@ -1,4 +1,4 @@
-package main
+package bili
 
 import (
 	"database/sql"
@@ -19,13 +19,18 @@ import (
 	"time"
 )
 
-var (
-	wg = sync.WaitGroup{}
-)
+var wg = sync.WaitGroup{}
 
 type comments []comment
 
 type (
+	Crawler struct {
+		Database *sqlx.DB
+		BVId     string
+		Average  uint
+		Range    uint
+	}
+
 	rawJson struct {
 		//Code    int    `json:"code"`
 		//Message string `json:"message"`
@@ -81,7 +86,45 @@ type (
 		userName  string
 		userLevel int
 	}
+
+	video struct {
+		Data struct {
+			Aid int `json:"aid"`
+		} `json:"data"`
+	}
 )
+
+func (spider Crawler) Go() error {
+	if spider.Database == nil {
+		return errors.New("database not found")
+	}
+	aid := aidGet(spider.BVId)
+	commentGetBegin(aid, spider.Database, func() {
+		err := delayMs(spider.Average, spider.Range)
+		errCheck(err)
+	})
+	return nil
+}
+
+func aidGet(bv string) int {
+	response, err := http.Get("https://api.bilibili.com/x/web-interface/view?bvid=" + bv)
+	errCheck(err)
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		errCheck(err)
+	}(response.Body)
+	if response.StatusCode != 200 {
+		log.Fatalln(response.StatusCode, response.Status)
+	}
+	readAll, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	var info video
+	err = json.Unmarshal(readAll, &info)
+	errCheck(err)
+	return info.Data.Aid
+}
 
 func (comments *comments) UnmarshalJSON(data []byte) error {
 	var rawJson rawJson
@@ -156,7 +199,7 @@ func commentInsertDriver(comments2 comments, db *sqlx.DB) {
 func commentInsert(comment comment, db *sqlx.DB) {
 	var id int
 	err := db.Get(&id, "SELECT id FROM bilibili_comments WHERE id=?", comment.id)
-	message := UnicodeEmojiCode(comment.message)
+	message := unicodeEmojiCode(comment.message)
 	if err == sql.ErrNoRows {
 		_, err := db.Exec(
 			"INSERT INTO bilibili_comments ( id, root, parent, date, `like`, message, userId, userName, userLevel ) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ? )",
@@ -169,7 +212,7 @@ func commentInsert(comment comment, db *sqlx.DB) {
 	}
 }
 
-func UnicodeEmojiDecode(s string) string {
+func unicodeEmojiDecode(s string) string {
 	re := regexp.MustCompile("\\[[\\\\u0-9a-zA-Z]+\\]")
 	reg := regexp.MustCompile("\\[\\\\u|]")
 	src := re.FindAllString(s, -1)
@@ -183,7 +226,7 @@ func UnicodeEmojiDecode(s string) string {
 	return s
 }
 
-func UnicodeEmojiCode(s string) string {
+func unicodeEmojiCode(s string) string {
 	ret := ""
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
@@ -228,6 +271,7 @@ func commentGetBegin(oid int, db *sqlx.DB, wait func()) {
 		}
 		progressBar(i, page)
 	}
+	progressBar(page, page)
 	wg.Wait()
 	err := db.Close()
 	errCheck(err)
@@ -236,7 +280,7 @@ func commentGetBegin(oid int, db *sqlx.DB, wait func()) {
 func pageCountGet(url string, wait func()) int {
 	a, b := 1, 32768
 	temp := 0
-	progressBar(0,a)
+	progressBar(0, a)
 	if commentGet(a, url) == nil {
 		return 0
 	}
@@ -252,7 +296,7 @@ func pageCountGet(url string, wait func()) int {
 		} else {
 			b = temp
 		}
-		progressBar(0,a)
+		progressBar(0, a)
 		if b-a <= 1 {
 			return a
 		}
@@ -288,57 +332,13 @@ func progressBar(done int, all int) {
 			progress = 0
 		}
 	}
-	fmt.Printf("▏ %d/%d  %.2f%c", done, all, float32(done) / float32(all) * 100, '%')
+	fmt.Printf("▏ %d/%d  %.2f%c", done, all, float32(done)/float32(all)*100, '%')
 }
 
 func main() {
-
 	db := databaseConnect()
 	commentGetBegin(54737593, db, func() {
 		err := delayMs(5000, 2500)
 		errCheck(err)
 	})
-
-	//for i := 1; ; i++ {
-	//	comments := commentGet(1)
-	//	go func() {
-	//		wg.Add(1)
-	//		commentInsertDriver(comments, db)
-	//		wg.Done()
-	//	}()
-	//	if comments == nil {
-	//		break
-	//	}
-	//}
-	//wg.Wait()
-
-	//for i := 0; ; i++ {
-	//	comments := commentGet(i)
-	//	if comments != nil {
-	//
-	//	}
-	//}
-
-	//proxy, err := url.Parse("http://121.43.190.89:3128/")
-	//errCheck(err)
-	//client := http.Client{
-	//	Transport:     &http.Transport{
-	//		Proxy: http.ProxyURL(proxy),
-	//		MaxIdleConnsPerHost: 10,
-	//		ResponseHeaderTimeout: time.Second * time.Duration(5),
-	//	},
-	//	Timeout: time.Second * 10,
-	//}
-	//response, err := client.Get(url_)
-	//defer func(Body io.ReadCloser) {
-	//	err := Body.Close()
-	//	errCheck(err)
-	//}(response.Body)
-	//fmt.Println(response.TransferEncoding)
-	//fmt.Println(response.Header)
-	//all, err := ioutil.ReadAll(response.Body)
-	//errCheck(err)
-	//var body comments
-	//err = json.Unmarshal(all, &body)
-	//fmt.Println(body)
 }

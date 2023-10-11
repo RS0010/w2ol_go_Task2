@@ -9,4 +9,4 @@ require (
 	github.com/jmoiron/sqlx v1.3.4
 )
 
-require golang.org/x/net v0.0.0-20210916014120-12bc252f5db8 // indirect
+require golang.org/x/net v0.17.0 // indirect
